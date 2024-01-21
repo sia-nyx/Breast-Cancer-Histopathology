@@ -1,0 +1,230 @@
+import tensorflow as tf
+from tensorflow.keras.layers.experimental import preprocessing
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.layers import GlobalAveragePooling2D, Dense
+from tensorflow.keras.models import Model
+import matplotlib.pyplot as plt
+from tensorflow.keras import layers
+from tensorflow.keras import models
+from tensorflow.keras import layers, models
+from tensorflow.keras import models, layers, optimizers
+from tensorflow.keras.applications import MobileNet
+from tensorflow.keras.applications.mobilenet import preprocess_input
+
+BATCH_SIZE = 32 #the number of data samples that will be processed in each iteration
+IMAGE_SIZE = 256 #size of the image
+CHANNELS=3 #the number of color channels in your input images.
+          #Common values are 1 for grayscale images and 3 for RGB color images.
+EPOCHS=25 #the number of times the entire dataset will be used to train the model
+
+dataset = tf.keras.preprocessing.image_dataset_from_directory(
+    "/content/drive/....",
+    seed=123,  #the random number generator
+    shuffle=True,
+    image_size=(IMAGE_SIZE,IMAGE_SIZE),
+    batch_size=BATCH_SIZE
+)
+
+class_names = dataset.class_names
+class_names
+
+for image_batch, labels_batch in dataset.take(1):
+    print(image_batch.shape)  #The shape typically has the form (batch_size, height, width, channels)
+    print(labels_batch.numpy()) #prints the labels batch;convert it to a NumPy array
+
+plt.figure(figsize=(10, 10))
+for image_batch, labels_batch in dataset.take(1):
+    for i in range(12):
+        ax = plt.subplot(3, 4, i + 1)
+        plt.imshow(image_batch[i].numpy().astype("uint8"))
+        plt.title(class_names[labels_batch[i]])
+        plt.axis("off")
+len(dataset)
+train_size = 0.8
+len(dataset)*train_size
+train_ds = dataset.take(54)
+len(train_ds)
+test_ds = dataset.skip(54)
+len(test_ds)
+val_size=0.1
+len(dataset)*val_size
+val_ds = test_ds.take(6)
+len(val_ds)
+test_ds = test_ds.skip(6)
+len(test_ds)
+def get_dataset_partitions_tf(ds, train_split=0.8, val_split=0.1, test_split=0.1, shuffle=True, shuffle_size=10000):
+    assert (train_split + test_split + val_split) == 1
+
+    ds_size = len(ds)
+
+    if shuffle:
+        ds = ds.shuffle(shuffle_size, seed=12)
+
+    train_size = int(train_split * ds_size)
+    val_size = int(val_split * ds_size)
+
+    train_ds = ds.take(train_size)
+    val_ds = ds.skip(train_size).take(val_size)
+    test_ds = ds.skip(train_size).skip(val_size)
+
+    return train_ds, val_ds, test_dsn_classes = 1
+input_shape = (224, 224, 3)  # MobileNet default input shape
+
+# Load MobileNet model (excluding the top classification layer)
+base_model = MobileNet(input_shape=input_shape, include_top=False, weights='imagenet')
+
+# Freeze the pre-trained layers
+base_model.trainable = False
+
+# Build your custom model on top of MobileNet
+model = models.Sequential([
+    base_model,
+    layers.GlobalAveragePooling2D(),
+    layers.Dense(128, activation='relu'),
+    layers.Dropout(0.5),
+    layers.Dense(n_classes, activation='softmax')
+])
+train_ds, val_ds, test_ds = get_dataset_partitions_tf(dataset)
+len(train_ds)
+len(val_ds)
+len(test_ds)
+train_ds = train_ds.cache().shuffle(1000).prefetch(buffer_size=tf.data.AUTOTUNE)
+val_ds = val_ds.cache().shuffle(1000).prefetch(buffer_size=tf.data.AUTOTUNE)
+test_ds = test_ds.cache().shuffle(1000).prefetch(buffer_size=tf.data.AUTOTUNE)
+resize_and_rescale = tf.keras.Sequential([
+    layers.experimental.preprocessing.Resizing(IMAGE_SIZE, IMAGE_SIZE),
+    layers.experimental.preprocessing.Rescaling(1./255),
+])
+
+data_augmentation = tf.keras.Sequential([
+  layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical"),
+  layers.experimental.preprocessing.RandomRotation(0.2),
+])
+
+train_ds = train_ds.map(
+    lambda x, y: (data_augmentation(x, training=True), y)
+).prefetch(buffer_size=tf.data.AUTOTUNE)
+# Compile the model
+model.compile(
+    optimizer='adam',
+    loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
+    metrics=['accuracy']
+)
+
+model.summary()
+def preprocess_image(image, label):
+    # Resize the image to the required input shape
+    image = tf.image.resize(image, (224, 224))
+    # Preprocess the image using MobileNet's preprocess_input
+    image = preprocess_input(image)
+    return image, label
+
+# Preprocess the datasets
+train_ds = train_ds.map(preprocess_image)
+val_ds = val_ds.map(preprocess_image)
+# Training
+history = model.fit(
+    train_ds,
+    batch_size=BATCH_SIZE,
+    validation_data=val_ds,
+    verbose=1,
+    epochs=25,
+)
+model.save('breastcancer_model_breakhis')
+
+loaded_model = tf.keras.models.load_model('breastcancer_model')
+scores = model.evaluate(test_ds, batch_size=32)
+print('Training Parameters:', history.params)
+history.history.keys()
+type(history.history['loss'])
+len(history.history['loss'])
+history.history['loss'][:5] # show loss for first 5 epochs
+acc = history.history['accuracy']
+val_acc = history.history['val_accuracy']
+
+loss = history.history['loss']
+val_loss = history.history['val_loss']
+plt.figure(figsize=(8, 8))
+plt.subplot(1, 2, 1)
+plt.plot(range(EPOCHS), acc, label='Training Accuracy')
+plt.plot(range(EPOCHS), val_acc, label='Validation Accuracy')
+plt.legend(loc='lower right')
+plt.title('Training and Validation Accuracy')
+
+plt.subplot(1, 2, 2)
+plt.plot(range(EPOCHS), loss, label='Training Loss')
+plt.plot(range(EPOCHS), val_loss, label='Validation Loss')
+plt.legend(loc='upper right')
+plt.title('Training and Validation Loss')
+plt.show()
+
+
+import numpy as np
+for images_batch, labels_batch in test_ds.take(1):
+
+    first_image = images_batch[0].numpy().astype('uint8')
+    first_label = labels_batch[0].numpy()
+
+    print("first image to predict")
+    plt.imshow(first_image)
+    print("actual label:",class_names[first_label])
+
+    batch_prediction = model.predict(images_batch)
+    print("predicted label:",class_names[np.argmax(batch_prediction[0])])
+training_accuracy = history.history['accuracy'][-1]
+print(f'Training Accuracy: {training_accuracy * 100:.2f}%')
+
+# Access the validation accuracy
+val_accuracy = history.history['val_accuracy'][-1]
+print(f'Validation Accuracy: {val_accuracy * 100:.2f}%')
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Create lists to store information about misclassified and correctly classified images
+misclassified_images = []
+correctly_classified_images = []
+
+# Iterate through the test dataset
+for images_batch, labels_batch in test_ds:
+    # Make predictions on the batch
+    batch_predictions = model.predict(images_batch)
+
+    # Iterate through individual images in the batch
+    for i in range(len(labels_batch)):
+        true_label = labels_batch[i].numpy()
+        predicted_label = np.argmax(batch_predictions[i])
+
+        # Check if the prediction is correct
+        if true_label != predicted_label:
+            # Image was misclassified
+            misclassified_images.append({
+                'True Label': class_names[true_label],
+                'Predicted Label': class_names[predicted_label],
+                'Image': images_batch[i].numpy().astype('uint8'),
+            })
+        else:
+            # Image was correctly classified
+            correctly_classified_images.append({
+                'True Label': class_names[true_label],
+                'Predicted Label': class_names[predicted_label],
+                'Image': images_batch[i].numpy().astype('uint8'),
+            })
+
+# Convert the lists to DataFrames
+misclassified_df = pd.DataFrame(misclassified_images)
+correctly_classified_df = pd.DataFrame(correctly_classified_images)
+
+# Save DataFrames to CSV files
+misclassified_df.to_csv('misclassified_images.csv', index=False)
+correctly_classified_df.to_csv('correctly_classified_images.csv', index=False)
+
+
+# Print the first few rows of each DataFrame
+print("Misclassified Images:")
+print(misclassified_df.head())
+
+print("\nCorrectly Classified Images:")
+print(correctly_classified_df.head())
+
+
